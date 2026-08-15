@@ -104,7 +104,9 @@ def rs_encode_msg(msg_in: List[int], nsym: int) -> List[int]:
     
     # Подготавливаем массив: данные + нули для коррекции
     mm = len(msg_in) + nsym
-    message_out = msg_in + [0] * nsym
+
+    # Создаем bytearray из нуля длиной nsym
+    message_out = msg_in + bytearray(nsym)
     
     # Быстрый синтетический делитель (аналогично gf_poly_div, но оптимизирован)
     for i in range(len(msg_in)):
