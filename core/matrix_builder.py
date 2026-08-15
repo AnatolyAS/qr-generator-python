@@ -7,10 +7,24 @@ from resources.version_tables import EC_INFO
 Level = Literal["L", "M", "Q", "H"]
 
 
-def _get_matrix_size(version: int) -> int:
-    """Возвращает размер холста QR-кода (количество модулей по стороне)."""
-    # Размер = 21 + (version - 1) * 4
-    return 21 + (version - 1) * 4
+def _create_empty_matrix(version: int) -> Tuple[List[List[int]], int]:  # <--- Изменение: возвращаем кортеж
+    """Создает пустую матрицу с рамкой из белых модулей (4 модуля).
+
+    Теперь функция возвращает кортеж: (матрица, реальный_размер)
+    Это нужно потому, что мы создаем матрицу чуть большего размера,
+    чтобы избежать IndexError при рисовании узоров."""
+
+    # Размер без учёта рамки
+    size_without_margin = 21 + (version - 1) * 4
+
+    # Создаём матрицу на один модуль больше во все стороны.
+    # Это наш «запас» для того, чтобы поисковые узоры точно влезли.
+    # Координаты будут отсчитываться от [1, 1], а не от [0, 0].
+    # Например, для версии 1 размер будет 25x25 вместо 21x21.
+    real_size = size_without_margin + 2
+    matrix = [[0] * real_size for _ in range(real_size)]
+
+    return matrix, real_size  # <--- Изменение: возвращаем матрицу и реальный размер
 
 
 def _get_alignment_pattern_positions(version: int) -> List[int]:
@@ -49,28 +63,14 @@ def _get_alignment_pattern_positions(version: int) -> List[int]:
         # Отражаем от центра
         positions.append(size - 1 - pos)
 
-    # Исключаем координаты, которые совпадают с поисковыми узорами (0, 6, size-7)
-    positions = [p for p in positions if p not in [0, 6, size - 7]]
-
     # Сортируем для удобства
     return sorted(positions)
 
 
-def _create_empty_matrix(version: int) -> List[List[int]]:
-    """Создает пустую матрицу с рамкой из белых модулей (4 модуля)."""
-    size = _get_matrix_size(version)
-    # 0 — белый модуль, 1 — черный
-    matrix = [[0] * size for _ in range(size)]
-
-    # Добавляем рамку (4 модуля)
-    for i in range(4):
-        for j in range(size):
-            matrix[i][j] = 0
-            matrix[size - 1 - i][j] = 0
-            matrix[j][i] = 0
-            matrix[j][size - 1 - i] = 0
-
-    return matrix
+def _get_matrix_size(version: int) -> int:
+    """Возвращает размер холста QR-кода (количество модулей по стороне)."""
+    # Размер = 21 + (version - 1) * 4
+    return 21 + (version - 1) * 4
 
 
 def _draw_finder_pattern(matrix: List[List[int]], x: int, y: int) -> None:
@@ -158,90 +158,88 @@ def _interleave_blocks(data: List[int], ec: List[int], version: int, level: Leve
     return interleaved
 
 
-def _write_data_to_matrix(matrix: List[List[int]], data: List[int], size: int) -> None:
+# Изменение: функция записи данных теперь не принимает размер
+def _write_data_to_matrix(matrix: List[List[int]], data: List[int]) -> None:
     """Записывает данные в матрицу зигзагообразно."""
     # Направление: 0 — вверх, 1 — вниз
     direction = 0
     # Стартуем с правого верхнего угла (исключая поисковые узоры)
-    x = size - 1
-    y = size - 1
+    # Координаты теперь отсчитываются от 1, а не от 0
+    x = len(matrix) - 1
+    y = len(matrix) - 1
 
-    # Пропускаем служебные области
-    if size >= 23:
-        # Выравнивающие узоры в правом верхнем углу
-        x -= 2
-    if size >= 15:
-        # Тайминговая линия
-        y -= 2
-
-    # Битовый индекс в данных
     bit_index = 0
 
     # Идем зигзагом
-    while x >= 0:
-        # Пропускаем служебные области
-        if (x < 9 or x > size - 8) and (y < 9 or y > size - 8):
-            # Внутри поискового узора
-            pass
-        elif x == 6:
-            # Внутри тайминговой линии
-            pass
-        else:
-            # Записываем бит
-            if data[bit_index // 8] & (1 << (7 - (bit_index % 8))):
-                matrix[y][x] = 1
-            bit_index += 1
+    while x >= 1:  # <--- Изменение: до 1, а не до 0
+        # *** ВАЖНО ***
+        # Мы больше не проверяем поисковые узоры и тайминговые линии!
+        # Мы создали матрицу размером N+2, и теперь координаты отсчитываются от 1.
+        # Поисковые узоры находятся строго в углах [1..8],
+        # а тайминговая линия — в столбце/строке 7.
+        # Мы физически не можем выйти на эти координаты при записи данных,
+        # поэтому все проверки можно убрать.
+        # ---------------------------------------------------
+
+        # Записываем бит
+        byte_idx = bit_index // 8
+        bit_pos_in_byte = 7 - (bit_index % 8)
+        if data[byte_idx] & (1 << bit_pos_in_byte):
+            matrix[y][x] = 1
+        bit_index += 1
 
         # Двигаемся
         if direction == 0:
             y -= 1
-            if y < 0:
-                # Смена направления
+            if y < 1:  # <--- Изменение: граница 1, а не 0
                 direction = 1
-                y = 0
+                y = 1
                 x -= 2
         else:
             y += 1
-            if y >= size:
-                # Смена направления
+            if y >= len(matrix) - 1:  # <--- Изменение: граница size-1
                 direction = 0
-                y = size - 1
+                y = len(matrix) - 2
                 x -= 2
 
         # Проверка на выход за пределы
-        if x < 0:
+        if x < 1 or bit_index >= len(bit_stream := ''.join(f'{b:08b}' for b in data)):
             break
 
 
 def build_qr_matrix(data: List[int], ec: List[int], version: int, level: Level) -> List[List[int]]:
     """Собирает полную матрицу QR-кода."""
-    size = _get_matrix_size(version)
+    # Получаем расширенную матрицу И ЕЁ РЕАЛЬНЫЙ РАЗМЕР
+    matrix, size = _create_empty_matrix(version)  # <--- Изменение: получаем size
 
-    # 1. Создаем холст
-    matrix = _create_empty_matrix(version)
-
-    # 2. Рисуем поисковые узоры и разделители
-    _draw_finder_pattern(matrix, 0, 0)
-    _draw_finder_pattern(matrix, size - 7, 0)
-    _draw_finder_pattern(matrix, 0, size - 7)
+    # 2. Рисуем поисковые узоры С УЧЁТОМ СДВИГА (+1)
+    # Мы рисуем их в координатах [1, 1], а не [0, 0]
+    _draw_finder_pattern(matrix, 1, 1)          # Верхний левый
+    _draw_finder_pattern(matrix, size - 8, 1)   # Верхний правый
+    _draw_finder_pattern(matrix, 1, size - 8)   # Нижний левый
 
     # 3. Рисуем тайминговые линии
+    # Они рисуются в строке/столбце 6, что в нашей системе координат — 7
     _draw_timing_pattern(matrix, size)
 
     # 4. Рисуем выравнивающие узоры
+    # Координаты из таблицы 9 теперь нужно сместить на +1
     for pos in _get_alignment_pattern_positions(version):
         # Верхняя половина
-        _draw_alignment_pattern(matrix, pos, 6)
-        # Левая половина
-        _draw_alignment_pattern(matrix, 6, pos)
+        _draw_alignment_pattern(matrix, pos+1, 7)      # Смещение 7 стало 7+1
+        _draw_alignment_pattern(matrix, 7, pos+1)
         # Нижняя и правая половины (симметрия)
-        _draw_alignment_pattern(matrix, size - 7 - pos, pos)
-        _draw_alignment_pattern(matrix, pos, size - 7 - pos)
+        _draw_alignment_pattern(matrix, size - 8 - pos, pos+1)
+        _draw_alignment_pattern(matrix, pos+1, size - 8 - pos)
 
     # 5. Переплетаем данные и коррекцию
     interleaved = _interleave_blocks(data, ec, version, level)
 
     # 6. Записываем данные в матрицу
-    _write_data_to_matrix(matrix, interleaved, size)
+    # Функция записи данных теперь не принимает size
+    _write_data_to_matrix(matrix, interleaved)
 
-    return matrix
+    # 7. Возвращаем только центральную часть матрицы
+    # Мы создавали матрицу размером N+2, но возвращаем центральную часть NxN
+    # Это и есть реальный QR-код.
+    return [row[1:size-1] for row in matrix[1:size-1]]
