@@ -212,10 +212,13 @@ def build_qr_matrix(data: List[int], ec: List[int], version: int, level: Level) 
     matrix, size = _create_empty_matrix(version)  # <--- Изменение: получаем size
 
     # 2. Рисуем поисковые узоры С УЧЁТОМ СДВИГА (+1)
-    # Мы рисуем их в координатах [1, 1], а не [0, 0]
-    _draw_finder_pattern(matrix, 1, 1)          # Верхний левый
-    _draw_finder_pattern(matrix, size - 8, 1)   # Верхний правый
-    _draw_finder_pattern(matrix, 1, size - 8)   # Нижний левый
+    # Получаем исходный размер без запаса
+    size_without_margin = _get_matrix_size(version)
+
+    # Рисуем узоры
+    _draw_finder_pattern(matrix, 1, 1)                     # Верхний левый
+    _draw_finder_pattern(matrix, size_without_margin - 6, 1)  # Верхний правый
+    _draw_finder_pattern(matrix, 1, size_without_margin - 6)  # Нижний левый
 
     # 3. Рисуем тайминговые линии
     # Они рисуются в строке/столбце 6, что в нашей системе координат — 7
