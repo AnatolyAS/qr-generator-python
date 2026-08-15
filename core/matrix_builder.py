@@ -17,11 +17,10 @@ def _create_empty_matrix(version: int) -> Tuple[List[List[int]], int]:  # <--- �
     # Размер без учёта рамки
     size_without_margin = 21 + (version - 1) * 4
 
-    # Создаём матрицу на один модуль больше во все стороны.
-    # Это наш «запас» для того, чтобы поисковые узоры точно влезли.
+    # Создаём матрицу на один модуль больше со всех сторон.
     # Координаты будут отсчитываться от [1, 1], а не от [0, 0].
     # Например, для версии 1 размер будет 25x25 вместо 21x21.
-    real_size = size_without_margin + 2
+    real_size = size_without_margin + 4  # <--- ИСПРАВЛЕНИЕ ЗДЕСЬ!
     matrix = [[0] * real_size for _ in range(real_size)]
 
     return matrix, real_size  # <--- Изменение: возвращаем матрицу и реальный размер
